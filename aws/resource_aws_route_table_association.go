@@ -3,6 +3,7 @@ package aws
 import (
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -18,6 +19,9 @@ func resourceAwsRouteTableAssociation() *schema.Resource {
 		Read:   resourceAwsRouteTableAssociationRead,
 		Update: resourceAwsRouteTableAssociationUpdate,
 		Delete: resourceAwsRouteTableAssociationDelete,
+		Importer: &schema.ResourceImporter{
+			State: resourceAwsRouteTableAssociationImport,
+		},
 
 		Schema: map[string]*schema.Schema{
 			"subnet_id": {
