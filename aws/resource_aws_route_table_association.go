@@ -34,6 +34,44 @@ func resourceAwsRouteTableAssociation() *schema.Resource {
 	}
 }
 
+func resourceAwsRouteTableAssociationImport(d *schema.ResourceData, meta interface{}) ([]*schema.ResourceData, error) {
+	idData := strings.Split(d.Id(), "/")
+	if len(idData) != 2 {
+		return nil, fmt.Errorf("ID needs to be in the form of <route-table-id>/<subnet-id>")
+	}
+
+	conn := meta.(*AWSClient).ec2conn
+	rtRaw, _, err := resourceAwsRouteTableStateRefreshFunc(
+		conn, idData[0])()
+	if err != nil {
+		return nil, err
+	}
+	if rtRaw == nil {
+		return nil, nil
+	}
+	rt := rtRaw.(*ec2.RouteTable)
+
+	found := false
+	for _, a := range rt.Associations {
+		if *a.SubnetId == idData[1] {
+			found = true
+			if err = d.Set("subnet_id", idData[1]); err != nil {
+				return nil, err
+			}
+			if err = d.Set("route_table_id", idData[0]); err != nil {
+				return nil, err
+			}
+			d.SetId(*a.RouteTableAssociationId)
+		}
+	}
+
+	if !found {
+		return nil, fmt.Errorf("association with subnet %s not found", idData[1])
+	}
+
+	return []*schema.ResourceData{d}, nil
+}
+
 func resourceAwsRouteTableAssociationCreate(d *schema.ResourceData, meta interface{}) error {
 	conn := meta.(*AWSClient).ec2conn
 
