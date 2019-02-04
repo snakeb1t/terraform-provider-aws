@@ -20,7 +20,7 @@ func resourceAwsKeyPair() *schema.Resource {
 		Update: nil,
 		Delete: resourceAwsKeyPairDelete,
 		Importer: &schema.ResourceImporter{
-			State: schema.ImportStatePassthrough,
+			State: resourceAwsKeyPairImport,
 		},
 
 		SchemaVersion: 1,
@@ -61,6 +61,42 @@ func resourceAwsKeyPair() *schema.Resource {
 			},
 		},
 	}
+}
+
+func resourceAwsKeyPairImport(d *schema.ResourceData, meta interface{}) ([]*schema.ResourceData, error) {
+	idData := strings.Split(d.Id(), ":")
+	if len(idData) != 2 {
+		return nil, fmt.Errorf("ID needs to be in the form of <key_pair_name>:<ssh_public_key_body>")
+	}
+
+	keyName := idData[0]
+	keyBody := idData[1]
+
+	conn := meta.(*AWSClient).ec2conn
+	req := &ec2.DescribeKeyPairsInput{
+		KeyNames: []*string{aws.String(keyName)},
+	}
+	resp, err := conn.DescribeKeyPairs(req)
+	if err != nil {
+		awsErr, ok := err.(awserr.Error)
+		if ok && awsErr.Code() == "InvalidKeyPair.NotFound" {
+			return nil, fmt.Errorf("keypair not found: " + awsErr.Error())
+		}
+		return nil, fmt.Errorf("Error retrieving KeyPair: %s", err)
+	}
+
+	for _, keyPair := range resp.KeyPairs {
+		if *keyPair.KeyName == keyName {
+			publicKey := "ssh-rsa " + keyBody + " " + keyName
+			d.Set("key_name", keyPair.KeyName)
+			d.Set("fingerprint", keyPair.KeyFingerprint)
+			d.Set("public_key", publicKey)
+			d.SetId(keyName)
+			return []*schema.ResourceData{d}, nil
+		}
+	}
+
+	return nil, fmt.Errorf("keypair %s not found", keyName)
 }
 
 func resourceAwsKeyPairCreate(d *schema.ResourceData, meta interface{}) error {
