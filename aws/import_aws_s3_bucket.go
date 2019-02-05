@@ -14,6 +14,8 @@ func resourceAwsS3BucketImportState(
 	meta interface{}) ([]*schema.ResourceData, error) {
 
 	results := make([]*schema.ResourceData, 1)
+	d.Set("force_destroy", false)
+	d.Set("acl", "private")
 	results[0] = d
 
 	conn := meta.(*AWSClient).s3conn
@@ -34,8 +36,6 @@ func resourceAwsS3BucketImportState(
 	pData.SetType("aws_s3_bucket_policy")
 	pData.Set("bucket", d.Id())
 	pData.Set("policy", pol)
-	pData.Set("force_destroy", false)
-	pData.Set("acl", "private")
 	results = append(results, pData)
 
 	return results, nil
