@@ -22,6 +22,9 @@ func resourceAwsLambdaPermission() *schema.Resource {
 		Create: resourceAwsLambdaPermissionCreate,
 		Read:   resourceAwsLambdaPermissionRead,
 		Delete: resourceAwsLambdaPermissionDelete,
+		Importer: &schema.ResourceImporter{
+			State: resourceAwsLambdaPermissionImport,
+		},
 
 		Schema: map[string]*schema.Schema{
 			"action": {
@@ -82,6 +85,94 @@ func resourceAwsLambdaPermission() *schema.Resource {
 			},
 		},
 	}
+}
+
+func resourceAwsLambdaPermissionImport(d *schema.ResourceData, meta interface{}) ([]*schema.ResourceData, error) {
+
+	idData := strings.Split(d.Id(), "/")
+	if len(idData) != 2 {
+		return nil, fmt.Errorf("ID needs to be in the form of <function-name>/<statement-id>")
+	}
+
+	functionName := idData[0]
+	sid := idData[1]
+
+	conn := meta.(*AWSClient).lambdaconn
+
+	input := lambda.GetPolicyInput{
+		FunctionName: aws.String(functionName),
+	}
+
+	var out *lambda.GetPolicyOutput
+	var statement *LambdaPolicyStatement
+	err := resource.Retry(1*time.Minute, func() *resource.RetryError {
+		// IAM is eventually consistent :/
+		var err error
+		out, err = conn.GetPolicy(&input)
+		if err != nil {
+			if awsErr, ok := err.(awserr.Error); ok {
+				if awsErr.Code() == "ResourceNotFoundException" {
+					return resource.RetryableError(err)
+				}
+			}
+			return resource.NonRetryableError(err)
+		}
+
+		policyInBytes := []byte(*out.Policy)
+		policy := LambdaPolicy{}
+		err = json.Unmarshal(policyInBytes, &policy)
+		if err != nil {
+			return resource.NonRetryableError(err)
+		}
+
+		statement, err = findLambdaPolicyStatementById(&policy, sid)
+		return resource.RetryableError(err)
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	qualifier, err := getQualifierFromLambdaAliasOrVersionArn(statement.Resource)
+	if err != nil {
+		log.Printf("[ERR] Error getting Lambda Qualifier: %s", err)
+	}
+	d.Set("qualifier", qualifier)
+
+	// Save Lambda function name in the same format
+	if strings.HasPrefix(d.Get("function_name").(string), "arn:"+meta.(*AWSClient).partition+":lambda:") {
+		// Strip qualifier off
+		trimmedArn := strings.TrimSuffix(statement.Resource, ":"+qualifier)
+		d.Set("function_name", trimmedArn)
+	} else {
+		functionName, err := getFunctionNameFromLambdaArn(statement.Resource)
+		if err != nil {
+			return nil, err
+		}
+		d.Set("function_name", functionName)
+	}
+
+	d.Set("action", statement.Action)
+	// Check if the principal is a cross-account IAM role
+	if _, ok := statement.Principal["AWS"]; ok {
+		d.Set("principal", statement.Principal["AWS"])
+	} else {
+		d.Set("principal", statement.Principal["Service"])
+	}
+
+	if stringEquals, ok := statement.Condition["StringEquals"]; ok {
+		d.Set("source_account", stringEquals["AWS:SourceAccount"])
+		d.Set("event_source_token", stringEquals["lambda:EventSourceToken"])
+	}
+
+	if arnLike, ok := statement.Condition["ArnLike"]; ok {
+		d.Set("source_arn", arnLike["AWS:SourceArn"])
+	}
+
+	d.Set("statement_id", statement.Sid)
+	d.SetId(sid)
+
+	return []*schema.ResourceData{d}, nil
 }
 
 func resourceAwsLambdaPermissionCreate(d *schema.ResourceData, meta interface{}) error {
