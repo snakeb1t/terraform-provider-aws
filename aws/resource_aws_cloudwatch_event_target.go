@@ -5,6 +5,7 @@ import (
 	"log"
 	"math"
 	"regexp"
+	"strings"
 
 	"github.com/hashicorp/terraform/helper/resource"
 	"github.com/hashicorp/terraform/helper/schema"
@@ -21,6 +22,9 @@ func resourceAwsCloudWatchEventTarget() *schema.Resource {
 		Read:   resourceAwsCloudWatchEventTargetRead,
 		Update: resourceAwsCloudWatchEventTargetUpdate,
 		Delete: resourceAwsCloudWatchEventTargetDelete,
+		Importer: &schema.ResourceImporter{
+			State: resourceAwsCloudWatchEventTargetImport,
+		},
 
 		Schema: map[string]*schema.Schema{
 			"rule": {
@@ -220,6 +224,32 @@ func resourceAwsCloudWatchEventTarget() *schema.Resource {
 			},
 		},
 	}
+}
+
+func resourceAwsCloudWatchEventTargetImport(d *schema.ResourceData, meta interface{}) ([]*schema.ResourceData, error) {
+	idData := strings.Split(d.Id(), "/")
+	if len(idData) != 2 {
+		return nil, fmt.Errorf("ID needs to be in the form of <rule-name>/<target-id>")
+	}
+
+	conn := meta.(*AWSClient).cloudwatcheventsconn
+	t, err := findEventTargetById(
+		idData[1],
+		idData[0],
+		nil, conn)
+	if err != nil {
+		return nil, err
+	}
+
+	d.Set("arn", t.Arn)
+	d.Set("target_id", t.Id)
+	d.Set("input", t.Input)
+	d.Set("input_path", t.InputPath)
+	d.Set("role_arn", t.RoleArn)
+	d.Set("rule", idData[0])
+
+	d.SetId(idData[0] + "-" + idData[1])
+	return []*schema.ResourceData{d}, nil
 }
 
 func resourceAwsCloudWatchEventTargetCreate(d *schema.ResourceData, meta interface{}) error {
