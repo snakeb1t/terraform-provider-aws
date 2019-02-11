@@ -52,6 +52,7 @@ func resourceAwsLambdaFunction() *schema.Resource {
 		Importer: &schema.ResourceImporter{
 			State: func(d *schema.ResourceData, meta interface{}) ([]*schema.ResourceData, error) {
 				d.Set("function_name", d.Id())
+				d.Set("publish", false)
 				return []*schema.ResourceData{d}, nil
 			},
 		},
