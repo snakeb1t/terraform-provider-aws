@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -51,7 +52,12 @@ func resourceAwsLambdaFunction() *schema.Resource {
 
 		Importer: &schema.ResourceImporter{
 			State: func(d *schema.ResourceData, meta interface{}) ([]*schema.ResourceData, error) {
-				d.Set("function_name", d.Id())
+				idData := strings.Split(d.Id(), ":")
+				if len(idData) != 2 {
+					return nil, fmt.Errorf("ID needs to be in the form of <function_name>:<filename>")
+				}
+				d.Set("function_name", idData[0])
+				d.Set("filename", idData[1])
 				d.Set("publish", false)
 				return []*schema.ResourceData{d}, nil
 			},
