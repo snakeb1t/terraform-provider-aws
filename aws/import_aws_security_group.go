@@ -2,6 +2,7 @@ package aws
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/hashicorp/terraform/helper/schema"
@@ -15,8 +16,9 @@ func resourceAwsSecurityGroupImportState(
 	meta interface{}) ([]*schema.ResourceData, error) {
 	conn := meta.(*AWSClient).ec2conn
 
+	idData := strings.Split(d.Id(), "_")
 	// First query the security group
-	sgRaw, _, err := SGStateRefreshFunc(conn, d.Id())()
+	sgRaw, _, err := SGStateRefreshFunc(conn, idData[0])()
 	if err != nil {
 		return nil, err
 	}
@@ -28,22 +30,13 @@ func resourceAwsSecurityGroupImportState(
 	// Start building our results
 	results := make([]*schema.ResourceData, 1,
 		1+len(sg.IpPermissions)+len(sg.IpPermissionsEgress))
+	if len(idData) == 2 {
+		d.Set("ingress", nil)
+		d.Set("egress", nil)
+	}
+	d.SetId(idData[0])
+	d.Set("revoke_rules_on_delete", false)
 	results[0] = d
-
-	// Construct the rules
-	permMap := map[string][]*ec2.IpPermission{
-		"ingress": sg.IpPermissions,
-		"egress":  sg.IpPermissionsEgress,
-	}
-	for ruleType, perms := range permMap {
-		for _, perm := range perms {
-			ds, err := resourceAwsSecurityGroupImportStatePerm(sg, ruleType, perm)
-			if err != nil {
-				return nil, err
-			}
-			results = append(results, ds...)
-		}
-	}
 
 	return results, nil
 }
