@@ -21,7 +21,7 @@ func resourceAwsIamUser() *schema.Resource {
 		Update: resourceAwsIamUserUpdate,
 		Delete: resourceAwsIamUserDelete,
 		Importer: &schema.ResourceImporter{
-			State: schema.ImportStatePassthrough,
+			State: resourceAwsIamUserImport,
 		},
 
 		Schema: map[string]*schema.Schema{
@@ -65,6 +65,11 @@ func resourceAwsIamUser() *schema.Resource {
 			"tags": tagsSchema(),
 		},
 	}
+}
+
+func resourceAwsIamUserImport(d *schema.ResourceData, meta interface{}) ([]*schema.ResourceData, error) {
+	d.Set("force_destroy", false)
+	return []*schema.ResourceData{d}, nil
 }
 
 func resourceAwsIamUserCreate(d *schema.ResourceData, meta interface{}) error {
