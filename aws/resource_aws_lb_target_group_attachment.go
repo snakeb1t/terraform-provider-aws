@@ -3,6 +3,7 @@ package aws
 import (
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/elbv2"
@@ -15,6 +16,9 @@ func resourceAwsLbTargetGroupAttachment() *schema.Resource {
 		Create: resourceAwsLbAttachmentCreate,
 		Read:   resourceAwsLbAttachmentRead,
 		Delete: resourceAwsLbAttachmentDelete,
+		Importer: &schema.ResourceImporter{
+			State: resourceAwsLbAttachmentImport,
+		},
 
 		Schema: map[string]*schema.Schema{
 			"target_group_arn": {
@@ -42,6 +46,26 @@ func resourceAwsLbTargetGroupAttachment() *schema.Resource {
 			},
 		},
 	}
+}
+
+func resourceAwsLbAttachmentImport(d *schema.ResourceData, meta interface{}) ([]*schema.ResourceData, error) {
+	idData := strings.Split(d.Id(), ",")
+	if len(idData) != 2 {
+		return nil, fmt.Errorf("ID needs to be in the form of <target_group_arn>,<target_id>")
+	}
+
+	targetGroupARN := idData[0]
+	targetID := idData[1]
+
+	if err := d.Set("target_group_arn", targetGroupARN); err != nil {
+		return nil, err
+	}
+	if err := d.Set("target_id", targetID); err != nil {
+		return nil, err
+	}
+	d.SetId(resource.PrefixedUniqueId(fmt.Sprintf("%s-", d.Get("target_group_arn"))))
+
+	return []*schema.ResourceData{d}, nil
 }
 
 func resourceAwsLbAttachmentCreate(d *schema.ResourceData, meta interface{}) error {
