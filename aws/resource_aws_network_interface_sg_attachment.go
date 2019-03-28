@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"reflect"
+	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
@@ -15,6 +16,9 @@ func resourceAwsNetworkInterfaceSGAttachment() *schema.Resource {
 		Create: resourceAwsNetworkInterfaceSGAttachmentCreate,
 		Read:   resourceAwsNetworkInterfaceSGAttachmentRead,
 		Delete: resourceAwsNetworkInterfaceSGAttachmentDelete,
+		Importer: &schema.ResourceImporter{
+			State: resourceAwsNetworkInterfaceSGAttachmentImport,
+		},
 		Schema: map[string]*schema.Schema{
 			"security_group_id": {
 				Type:     schema.TypeString,
@@ -28,6 +32,26 @@ func resourceAwsNetworkInterfaceSGAttachment() *schema.Resource {
 			},
 		},
 	}
+}
+
+func resourceAwsNetworkInterfaceSGAttachmentImport(d *schema.ResourceData, meta interface{}) ([]*schema.ResourceData, error) {
+	idData := strings.Split(d.Id(), ",")
+	if len(idData) != 2 {
+		return nil, fmt.Errorf("ID needs to be in the form of <security-group-id>,<network-interface-id>")
+	}
+
+	securityGroupID := idData[0]
+	networkIfaceID := idData[1]
+
+	if err := d.Set("security_group_id", securityGroupID); err != nil {
+		return nil, err
+	}
+	if err := d.Set("network_interface_id", networkIfaceID); err != nil {
+		return nil, err
+	}
+	d.SetId(fmt.Sprintf("%s_%s", securityGroupID, networkIfaceID))
+
+	return []*schema.ResourceData{d}, nil
 }
 
 func resourceAwsNetworkInterfaceSGAttachmentCreate(d *schema.ResourceData, meta interface{}) error {
