@@ -3,6 +3,7 @@ package aws
 import (
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
@@ -15,6 +16,9 @@ func resourceAwsVpcEndpointServiceAllowedPrincipal() *schema.Resource {
 		Create: resourceAwsVpcEndpointServiceAllowedPrincipalCreate,
 		Read:   resourceAwsVpcEndpointServiceAllowedPrincipalRead,
 		Delete: resourceAwsVpcEndpointServiceAllowedPrincipalDelete,
+		Importer: &schema.ResourceImporter{
+			State: resourceAwsVpcEndpointServiceAllowedPrincipalImport,
+		},
 
 		Schema: map[string]*schema.Schema{
 			"vpc_endpoint_service_id": {
@@ -29,6 +33,27 @@ func resourceAwsVpcEndpointServiceAllowedPrincipal() *schema.Resource {
 			},
 		},
 	}
+}
+
+func resourceAwsVpcEndpointServiceAllowedPrincipalImport(d *schema.ResourceData, meta interface{}) ([]*schema.ResourceData, error) {
+	idData := strings.Split(d.Id(), ",")
+	if len(idData) != 2 {
+		return nil, fmt.Errorf("ID needs to be in the form of <vpc-endpoint-service-id>,<principal-arn>")
+	}
+
+	serviceID := idData[0]
+	principalARN := idData[1]
+
+	if err := d.Set("vpc_endpoint_service_id", serviceID); err != nil {
+		return nil, err
+	}
+	if err := d.Set("principal_arn", principalARN); err != nil {
+		return nil, err
+	}
+
+	d.SetId(vpcEndpointServiceIdPrincipalArnHash(serviceID, principalARN))
+
+	return []*schema.ResourceData{d}, nil
 }
 
 func resourceAwsVpcEndpointServiceAllowedPrincipalCreate(d *schema.ResourceData, meta interface{}) error {
